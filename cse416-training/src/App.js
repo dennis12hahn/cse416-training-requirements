@@ -1,15 +1,13 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useTable } from "react-table";
 import "bootstrap/dist/css/bootstrap.css";
 
 import firebase from "firebase/compat/app";
-import "firebase/firestore";
-import "firebase/auth";
+import "firebase/compat/firestore";
 
-import { useAuthState } from "react-firebase-hooks/auth";
-import { useColelctionData } from "react-firebase-hooks/firestore";
+import { useCollectionData } from "react-firebase-hooks/firestore";
 
-firebase.initializeApp({
+const firebaseConfig = {
   apiKey: "AIzaSyAs4XIS-dzpP36B95QQa4z0bk_PR8S53lk",
   authDomain: "cse416-training.firebaseapp.com",
   projectId: "cse416-training",
@@ -17,7 +15,10 @@ firebase.initializeApp({
   messagingSenderId: "838408399543",
   appId: "1:838408399543:web:6c11f4dc6956fed2757b32",
   measurementId: "G-E7F66BCT9L",
-});
+};
+
+const app = firebase.initializeApp(firebaseConfig);
+const firestore = firebase.firestore();
 
 const EditableCell = ({
   value: initialValue,
@@ -39,16 +40,22 @@ const EditableCell = ({
     setValue(initialValue);
   }, [initialValue]);
 
-  return <input value={value} onChange={onChange} onBlur={onBlur} />
+  return <input value={value} onChange={onChange} onBlur={onBlur} />;
 };
 
 const defaultColumn = {
-  Cell: EditableCell
-}
+  Cell: EditableCell,
+};
 
 function Table({ columns, data, updateMyData, skipPageReset }) {
   const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } =
-    useTable({ columns, data, defaultColumn, autoResetPage: !skipPageReset, updateMyData });
+    useTable({
+      columns,
+      data,
+      defaultColumn,
+      autoResetPage: !skipPageReset,
+      updateMyData,
+    });
 
   return (
     <table
@@ -81,6 +88,16 @@ function Table({ columns, data, updateMyData, skipPageReset }) {
 }
 
 function App() {
+  // const [data, setData] = React.useState(() => require("./MOCK_DATA.json"), []);
+
+  const FirestoreDocument = () => {
+    const [value, loading, error] = useCollectionData(
+      firestore.collection("users")
+    );
+  };
+
+  const [data, setData] = React.useState();
+
   const columns = React.useMemo(
     () => [
       {
@@ -99,16 +116,45 @@ function App() {
         Header: "Gender",
         accessor: "gender",
       },
+      {
+        Header: "Delete",
+        id: "delete",
+        accessor: (str) => "delete",
+        Cell: (tableProps) => (
+          <button
+            class="btn btn-danger btn-sm"
+            onClick={() => {
+              const dataCopy = [...data];
+              dataCopy.splice(tableProps.row.index, 1);
+              setData(dataCopy);
+            }}
+          >
+            x
+          </button>
+        ),
+      },
+      {
+        Header: "Insert",
+        id: "insert",
+        accessor: (str) => "insert",
+        Cell: (tableProps) => (
+          <button
+            class="btn btn-success btn-sm"
+            onClick={() => {
+              const dataCopy = [...data];
+              dataCopy.splice(tableProps.row.index, 0, []);
+              setData(dataCopy);
+            }}
+          >
+            +
+          </button>
+        ),
+      },
     ],
-    []
+    [data]
   );
 
-  const [data, setData] = React.useState(() => require("./MOCK_DATA.json"), []);
-  const [originalData] = React.useState(data)
-  const [skipPageReset, setSkipPageReset] = React.useState(false)
-
   const updateMyData = (rowIndex, columnId, value) => {
-    setSkipPageReset(true);
     setData((old) =>
       old.map((row, index) => {
         if (index === rowIndex) {
@@ -121,10 +167,6 @@ function App() {
       })
     );
   };
-
-  React.useEffect(() => {
-    setSkipPageReset(false);
-  }, [data])
 
   return <Table columns={columns} data={data} updateMyData={updateMyData} />;
 }
