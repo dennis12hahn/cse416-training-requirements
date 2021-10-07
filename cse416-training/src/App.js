@@ -5,8 +5,6 @@ import "bootstrap/dist/css/bootstrap.css";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
 
-import { useCollectionData } from "react-firebase-hooks/firestore";
-
 const firebaseConfig = {
   apiKey: "AIzaSyAs4XIS-dzpP36B95QQa4z0bk_PR8S53lk",
   authDomain: "cse416-training.firebaseapp.com",
@@ -90,16 +88,17 @@ function Table({ columns, data, updateMyData, skipPageReset }) {
 function App() {
   // const [data, setData] = React.useState(() => require("./MOCK_DATA.json"), []);
 
-  const FirestoreDocument = () => {
-    const [value, loading, error] = useCollectionData(
-      firestore.collection("users")
-    );
-  };
+  useState(() => {
+    firestore.collection("users").onSnapshot((snapshot) => {
+      setData(snapshot.docs.map((doc) => doc.data()));
+    });
+  }, []);
 
-  const [data, setData] = React.useState();
+  const [data, setData] = React.useState([]);
 
   const columns = React.useMemo(
     () => [
+      { Header: "ID", accessor: "id" },
       {
         Header: "First Name",
         accessor: "first_name",
@@ -125,8 +124,21 @@ function App() {
             class="btn btn-danger btn-sm"
             onClick={() => {
               const dataCopy = [...data];
-              dataCopy.splice(tableProps.row.index, 1);
-              setData(dataCopy);
+              const user_ref = firestore
+                .collection("users")
+                .where("id", "==", dataCopy[tableProps.row.index].id)
+                .limit(1);
+
+              let batch = firestore.batch();
+
+              user_ref.get().then((snapshot) => {
+                snapshot.docs.forEach((doc) => {
+                  batch.delete(doc.ref);
+                  dataCopy.splice(tableProps.row.index, 1);
+                  setData(dataCopy);
+                });
+                return batch.commit();
+              });
             }}
           >
             x
@@ -142,8 +154,28 @@ function App() {
             class="btn btn-success btn-sm"
             onClick={() => {
               const dataCopy = [...data];
-              dataCopy.splice(tableProps.row.index, 0, []);
-              setData(dataCopy);
+
+              const new_user = {
+                gender: "",
+                first_name: "",
+                last_name: "",
+                email: "",
+                id: "",
+              };
+
+              const query = firestore
+                .collection("users")
+                .orderBy("id", "desc")
+                .limit(1);
+
+              query.get().then((snapshot) => {
+                snapshot.docs.forEach((doc) => {
+                  new_user.id = doc.get("id") + 1;
+                  dataCopy.push(new_user);
+                  setData(dataCopy);
+                  firestore.collection("users").add(new_user);
+                });
+              });
             }}
           >
             +
@@ -158,17 +190,88 @@ function App() {
     setData((old) =>
       old.map((row, index) => {
         if (index === rowIndex) {
-          return {
-            ...old[rowIndex],
-            [columnId]: value,
-          };
+          try {
+            return {
+              ...old[rowIndex],
+              [columnId]: value,
+            };
+          } finally {
+            const user_ref = firestore
+              .collection("users")
+              .where("id", "==", old[index].id)
+              .limit(1);
+
+            let batch = firestore.batch();
+            const user = old[index];
+            console.log(user);
+
+            user_ref.get().then((snapshot) => {
+              snapshot.docs.forEach((doc) => {
+                batch.update(doc.ref, user);
+              });
+              return batch.commit();
+            });
+          }
         }
         return row;
       })
     );
   };
 
-  return <Table columns={columns} data={data} updateMyData={updateMyData} />;
+  return (
+    <div>
+      <div
+        style={{
+          margin: "auto",
+          width: "50%",
+          padding: "10px",
+        }}
+      >
+        <button
+          class="btn btn-primary btn-success"
+          style={{ marginLeft: "50%" }}
+          onClick={() => {
+            const dataCopy = [...data];
+
+            const new_user = {
+              gender: "",
+              first_name: "",
+              last_name: "",
+              email: "",
+              id: "",
+            };
+
+            var no_users = false;
+
+            if (dataCopy.length === 0) {
+              no_users = true;
+              new_user.id = 1;
+              dataCopy.push(new_user);
+              setData(dataCopy);
+              firestore.collection("users").add(new_user);
+            } else {
+              const query = firestore
+                .collection("users")
+                .orderBy("id", "desc")
+                .limit(1);
+
+              query.get().then((snapshot) => {
+                snapshot.docs.forEach((doc) => {
+                  new_user.id = doc.get("id") + 1;
+                  dataCopy.push(new_user);
+                  setData(dataCopy);
+                  firestore.collection("users").add(new_user);
+                });
+              });
+            }
+          }}
+        >
+          Add New
+        </button>
+      </div>
+      <Table columns={columns} data={data} updateMyData={updateMyData} />;
+    </div>
+  );
 }
 
 export default App;
